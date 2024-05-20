@@ -1,0 +1,60 @@
+name: Build and Test Bitcoin Node
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3
+        sudo apt install -y libevent-dev libboost-dev libboost-system-dev libboost-filesystem-dev libboost-test-dev
+        sudo apt install -y libsqlite3-dev
+        ./contrib/install_db4.sh $(pwd)
+        export BDB_PREFIX=$(pwd)/db4
+
+    - name: Configure and build Bitcoin
+      run: |
+        ./autogen.sh
+        ./configure BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include"
+        make
+
+    - name: Install Bitcoin executables
+      run: sudo make install
+
+    - name: Verify installation
+      run: |
+        which bitcoind
+        which bitcoin-cli
+
+    - name: Setup Bitcoin configuration
+      run: |
+        mkdir -p ~/.bitcoin
+        echo -e "rpcuser=Luxia01\nrpcpassword=mnbvcxz123\ntxindex=1\nserver=1\nrest=1\nzmqpubrawblock=tcp://127.0.0.1:28332\nzmqpubrawtx=tcp://127.0.0.1:28333\nprinttoconsole=1" > ~/.bitcoin/bitcoin.conf
+
+    - name: Start Bitcoin node
+      run: bitcoind -daemon
+
+    - name: Wait for Bitcoin node to start
+      run: |
+        sleep 60
+        bitcoin-cli getblockcount
+
+    - name: Run Bitcoin node in regtest mode
+      run: |
+        bitcoind -regtest -daemon
+        sleep 10
+        bitcoin-cli -regtest generatetoaddress 101 $(bitcoin-cli -regtest getnewaddress)
+        bitcoin-cli -regtest getbalance
+name: Build and Test Bitcoin Node
+
